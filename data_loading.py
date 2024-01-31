@@ -21,7 +21,19 @@ def get_data(args, data_config):
     df_edges['Timestamp'] = df_edges['Timestamp'] - df_edges['Timestamp'].min()
 
     max_n_id = df_edges.loc[:, ['from_id', 'to_id']].to_numpy().max() + 1
-    df_nodes = pd.DataFrame({'NodeID': np.arange(max_n_id), 'Feature': np.ones(max_n_id)})
+    #df_nodes = pd.DataFrame({'NodeID': np.arange(max_n_id), 'Feature': np.ones(max_n_id)})
+    # Aggregate 'Amount Sent' statistics for each 'from_id'
+    sent_stats = df.groupby('Src_Account')['Amount Paid'].agg(['sum', 'min', 'max', 'std']).rename(columns=lambda x: f'Sent_{x}').reindex(unique_nodes).fillna(0)
+
+    # Aggregate 'Amount Received' statistics for each 'to_id'
+    received_stats = df.groupby('Dst_Account')['Amount Received'].agg(['sum', 'min', 'max', 'std']).rename(columns=lambda x: f'Received_{x}').reindex(unique_nodes).fillna(0)
+
+    # Merge the sent and received statistics for each node
+    df_nodes = pd.concat([sent_stats, received_stats], axis=1).fillna(0)
+
+
+
+    
     timestamps = torch.Tensor(df_edges['Timestamp'].to_numpy())
     y = torch.LongTensor(df_edges['Is Laundering'].to_numpy())
 
@@ -30,10 +42,12 @@ def get_data(args, data_config):
     logging.info(f"Number of transactions = {df_edges.shape[0]}")
 
     edge_features = ['Timestamp', 'Amount Received', 'Received Currency', 'Payment Format']
-    node_features = ['Feature']
+    #node_features = ['Feature']
+    node_features = ['Sent_sum', 'Sent_min', 'Sent_max', 'Sent_std','Received_sum', 'Received_min', 'Received_max', 'Received_std']
 
     logging.info(f'Edge features being used: {edge_features}')
-    logging.info(f'Node features being used: {node_features} ("Feature" is a placeholder feature of all 1s)')
+    logging.info(f'Node features being used: {node_features}')
+    #logging.info(f'Node features being used: {node_features} ("Feature" is a placeholder feature of all 1s)')
 
     x = torch.tensor(df_nodes.loc[:, node_features].to_numpy()).float()
     edge_index = torch.LongTensor(df_edges.loc[:, ['from_id', 'to_id']].to_numpy().T)
